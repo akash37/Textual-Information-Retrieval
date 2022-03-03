@@ -7,11 +7,9 @@ import time
 import nltk
 from datetime import timedelta
 from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer
 from contextlib import redirect_stdout
 from nltk.stem import WordNetLemmatizer
 lemmatizer = WordNetLemmatizer()
-stemmer = PorterStemmer()
 start = time.time()
 print("Start Time = " + str(time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(start))))
 experiment = int(sys.argv[1])
@@ -41,7 +39,7 @@ def get_total_text(root, type_of_file):
         if type_of_file == "collection":
             text = (str(root[1].text) + " " + str(root[1].text) + " " + str(root[2].text)).lower()
         else:
-            text = str(root[1].text).lower()
+            text = (str(root[1].text) + " " + str(root[2].text)).lower()
     elif experiment == 3:
         if type_of_file == "collection":
             text = (str(root[1].text) + " " + str(root[2].text)).lower()
@@ -135,30 +133,35 @@ def create_tf_idf(path, type_of_file):
 
 
 '''
-This function calculates the matching for a particular query with list of collection documents
+This function calculates the matching for a particular query with list of collection documents for Vector Space Model
 '''
 
 
 def calculate_matching(collections, query):
     matches = {}
-    numerator = 0
     d1 = 0
     d2 = 0
     for document, value in collections.items():
+        numerator = 0
         for k1, v2 in collections[document].items():
             d1 += v2 * v2
         for term, val in query.items():
             if term in collections[document]:
                 numerator += collections[document][term] * query[term]
-                d2 += query[term] * query[term]
+            d2 += query[term] * query[term]
 
         if d1 != 0 and d2 != 0:
             match_value = numerator / (math.sqrt(d1) * math.sqrt(d2))
             matches.update({document: match_value})
-            numerator = 0
             d2 = 0
             d1 = 0
     return dict(sorted(matches.items(), key=lambda item: item[1], reverse=True))
+
+
+'''
+This function is called to get the output. It takes model_name as an input parameter and generates the document
+with top 1000 matches for a particular query
+'''
 
 
 def get_output(model_name):
@@ -180,6 +183,19 @@ def get_output(model_name):
                             break
 
 
+'''
+This function is used for BM25, it takes input as index of collections, query, k, b
+Dictionary collection_term_count which is calculated from create_tf_idf function 
+is used to perform calculations of idf and BM25 score for a particular query.
+Returns a dictionary of documents which is sorted in descending order according to score
+{
+    "doc_id_1" : score with query,
+    "doc_id_2" : score with query,
+    ...
+}
+'''
+
+
 def calculate_bm_25(index, query, k, b):
     bm25_score = {}
     n = len(collection_length)
@@ -193,7 +209,20 @@ def calculate_bm_25(index, query, k, b):
                 total += idf * val
         if total > 0:
             bm25_score.update({doc_id: total})
-    return bm25_score
+    return dict(sorted(bm25_score.items(), key=lambda item: item[1], reverse=True))
+
+
+'''
+This function is used for Query Likelihood Model, it takes input as index of collections, query
+Dictionary collection_term_count which is calculated from create_tf_idf function 
+is used to calculated the probability of term in a given a document.
+Returns a dictionary of documents which is sorted in descending order according to score
+{
+    "doc_id_1" : score with query,
+    "doc_id_2" : score with query,
+    ...
+}
+'''
 
 
 def calculate_language_model_score(index, query):
@@ -207,14 +236,14 @@ def calculate_language_model_score(index, query):
                 prob = 0
                 break
         language_model_score.update({doc_id: prob})
-    return language_model_score
+    return dict(sorted(language_model_score.items(), key=lambda item: item[1], reverse=True))
 
 
 query_path = "topics"
 dir_path = "COLLECTION"
 collection_length, collection_term_count, index_of_collections = create_tf_idf(dir_path, "collection")
 query_length, query_term_count, index_of_queries = create_tf_idf(query_path, "queries")
-average_length = sum(collection_length.values()) / len(collection_length)
+average_length = sum(collection_length.values()) / len(collection_length) # average length is used in BM25
 get_output("vsm")
 get_output("bm25")
 get_output("query_likelihood")
